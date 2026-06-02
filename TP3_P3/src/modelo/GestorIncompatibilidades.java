@@ -15,6 +15,15 @@ public class GestorIncompatibilidades {
 		return new ArrayList<>(incompatibilidades);
 	}
 
+	public void limpiar() {
+		incompatibilidades.clear();
+	}
+
+	/** Quita todas las incompatibilidades en las que participa la persona. */
+	public void eliminarInvolucrando(Persona persona) {
+		incompatibilidades.removeIf(i -> i.involucra(persona));
+	}
+
 	/** Indica si dos personas son incompatibles entre sí. */
 	public boolean sonIncompatibles(Persona p1, Persona p2) {
 		for (Incompatibilidad i : incompatibilidades) {

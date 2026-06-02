@@ -1,9 +1,12 @@
 package modelo;
 
+import java.io.Serializable;
 import java.util.EnumMap;
 import java.util.Map;
 
-public class Requerimientos {
+public class Requerimientos implements Serializable {
+
+	private static final long serialVersionUID = 1L;
 
 	private final Map<Rol, Integer> cantidades = new EnumMap<>(Rol.class);
 
@@ -34,6 +37,13 @@ public class Requerimientos {
 			suma += c;
 		}
 		return suma;
+	}
+
+	/** Copia las cantidades desde otro objeto de requerimientos. */
+	public void copiarDesde(Requerimientos otros) {
+		for (Rol r : Rol.values()) {
+			cantidades.put(r, otros.getCantidad(r));
+		}
 	}
 
 	@Override

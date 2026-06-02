@@ -4,6 +4,9 @@ import java.awt.BorderLayout;
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.io.IOException;
 import java.util.List;
 
 import javax.swing.DefaultComboBoxModel;
@@ -13,17 +16,24 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.Timer;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 import javax.swing.border.EmptyBorder;
 
 import controlador.Controlador;
-import modelo.Equipo;
+import controlador.GeneradorDatosPrueba;
+import modelo.Incompatibilidad;
 import modelo.Persona;
+import modelo.Requerimientos;
+import modelo.ResultadoResolucion;
 import modelo.Rol;
 
 /**
@@ -33,11 +43,27 @@ import modelo.Rol;
 public class VentanaPrincipal extends JFrame {
 
 	private static final long serialVersionUID = 1L;
+	private static final int LIMITE_LISTADO_UI = 50;
+	private static final int LIMITE_COMBO_UI = 100;
+	private static final int INTERVALO_ANIMACION_MS = 20;
+	private static final int PROGRESO_MAXIMO_BUSQUEDA = 70;
+	private static final int DURACION_SUBIDA_BUSQUEDA_MS = 2000;
+	private static final int DURACION_COMPLETAR_MS = 1500;
 
 	private final Controlador controlador = new Controlador();
 
+	private Timer timerProgreso;
+	private long inicioResolucion;
+	private ResultadoResolucion resultadoPendiente;
+	private boolean resolucionTerminada;
+	private boolean faseFinalizacion;
+	private long inicioFaseFinal;
+	private int progresoInicioFaseFinal;
+	private int progresoVisual;
+
 	// Pestaña Personas
 	private JTextField txtNombre;
+	private JTextField txtNombreBorrar;
 	private JComboBox<Rol> cmbRol;
 	private JSpinner spnCalificacion;
 	private JTextArea areaPersonas;
@@ -56,45 +82,80 @@ public class VentanaPrincipal extends JFrame {
 	// Pestaña Resultado
 	private JTextArea areaResultado;
 	private JButton btnResolver;
+	private JProgressBar barraProgreso;
+	private JLabel lblProgreso;
 
 	public VentanaPrincipal() {
+		TemaOscuro.aplicar();
+
 		setTitle("Equipo Ideal");
-		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		setBounds(100, 100, 600, 500);
+		setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+		setBounds(100, 100, 650, 520);
+		getContentPane().setBackground(TemaOscuro.FONDO);
 
 		JTabbedPane tabs = new JTabbedPane();
+		tabs.setBackground(TemaOscuro.FONDO);
 		tabs.addTab("Personas", crearPanelPersonas());
 		tabs.addTab("Incompatibilidades", crearPanelIncompatibilidades());
 		tabs.addTab("Requerimientos", crearPanelRequerimientos());
 		tabs.addTab("Resultado", crearPanelResultado());
 		getContentPane().add(tabs);
+
+		addWindowListener(new WindowAdapter() {
+			@Override
+			public void windowClosing(WindowEvent e) {
+				cerrarAplicacion();
+			}
+		});
+
+		cargarDatosGuardados();
+		if (controlador.getPersonas().isEmpty()) {
+			cargarDatosPruebaIniciales();
+		}
 	}
 
 	private JPanel crearPanelPersonas() {
 		JPanel panel = new JPanel(new BorderLayout());
-		panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+		panel.setBorder(TemaOscuro.bordePanel());
+		panel.setBackground(TemaOscuro.FONDO_PANEL);
 
-		JPanel form = new JPanel(new GridLayout(4, 2, 5, 5));
-		form.add(new JLabel("Nombre:"));
+		JPanel form = new JPanel(new GridLayout(8, 2, 5, 5));
+		form.setBackground(TemaOscuro.FONDO_PANEL);
+		form.add(etiqueta("Nombre:"));
 		txtNombre = new JTextField();
 		form.add(txtNombre);
 
-		form.add(new JLabel("Rol:"));
+		form.add(etiqueta("Rol:"));
 		cmbRol = new JComboBox<>(Rol.values());
 		form.add(cmbRol);
 
-		form.add(new JLabel("Calificación (1-5):"));
+		form.add(etiqueta("Calificación (1-5):"));
 		spnCalificacion = new JSpinner(new SpinnerNumberModel(3, 1, 5, 1));
 		form.add(spnCalificacion);
+		configurarSpinnerSoloFlechas(spnCalificacion);
 
 		JButton btnAgregar = new JButton("Agregar persona");
 		form.add(btnAgregar);
-		form.add(new JLabel(""));
+
+		JButton btnGenerar = new JButton("Generar " + GeneradorDatosPrueba.EMPLEADOS_DEFAULT
+				+ " empleados (" + GeneradorDatosPrueba.INCOMPATIBILIDADES_DEFAULT + " incompat.)");
+		form.add(btnGenerar);
+
+		form.add(new JLabel("Nombre a borrar:"));
+		txtNombreBorrar = new JTextField();
+		form.add(txtNombreBorrar);
+
+		JButton btnBorrarPersona = new JButton("Borrar persona");
+		form.add(btnBorrarPersona);
+
+		JButton btnBorrarTodas = new JButton("Borrar todas las personas");
+		form.add(btnBorrarTodas);
 
 		panel.add(form, BorderLayout.NORTH);
 
 		areaPersonas = new JTextArea();
 		areaPersonas.setEditable(false);
+		TemaOscuro.estilizarAreaTexto(areaPersonas);
 		panel.add(new JScrollPane(areaPersonas), BorderLayout.CENTER);
 
 		btnAgregar.addActionListener(new ActionListener() {
@@ -103,30 +164,52 @@ public class VentanaPrincipal extends JFrame {
 			}
 		});
 
+		btnGenerar.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				generarDatosPrueba();
+			}
+		});
+
+		btnBorrarPersona.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				borrarPersona();
+			}
+		});
+
+		btnBorrarTodas.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				borrarTodasLasPersonas();
+			}
+		});
+
+		TemaOscuro.estilizarContenedor(form);
 		return panel;
 	}
 
 	private JPanel crearPanelIncompatibilidades() {
 		JPanel panel = new JPanel(new BorderLayout());
-		panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+		panel.setBorder(TemaOscuro.bordePanel());
+		panel.setBackground(TemaOscuro.FONDO_PANEL);
 
 		JPanel form = new JPanel(new GridLayout(3, 2, 5, 5));
-		form.add(new JLabel("Persona A:"));
+		form.setBackground(TemaOscuro.FONDO_PANEL);
+		form.add(etiqueta("Persona A:"));
 		cmbPersonaA = new JComboBox<>();
 		form.add(cmbPersonaA);
 
-		form.add(new JLabel("Persona B:"));
+		form.add(etiqueta("Persona B:"));
 		cmbPersonaB = new JComboBox<>();
 		form.add(cmbPersonaB);
 
 		JButton btnAgregar = new JButton("Agregar incompatibilidad");
 		form.add(btnAgregar);
-		form.add(new JLabel(""));
+		form.add(etiqueta(""));
 
 		panel.add(form, BorderLayout.NORTH);
 
 		areaIncompat = new JTextArea();
 		areaIncompat.setEditable(false);
+		TemaOscuro.estilizarAreaTexto(areaIncompat);
 		panel.add(new JScrollPane(areaIncompat), BorderLayout.CENTER);
 
 		btnAgregar.addActionListener(new ActionListener() {
@@ -135,42 +218,83 @@ public class VentanaPrincipal extends JFrame {
 			}
 		});
 
+		TemaOscuro.estilizarContenedor(form);
 		return panel;
 	}
 
 	private JPanel crearPanelRequerimientos() {
-		JPanel panel = new JPanel(new GridLayout(5, 2, 5, 5));
-		panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+		JPanel panel = new JPanel(new GridLayout(4, 2, 5, 5));
+		panel.setBorder(TemaOscuro.bordePanel());
+		panel.setBackground(TemaOscuro.FONDO_PANEL);
 
-		panel.add(new JLabel("Líderes de proyecto:"));
+		panel.add(etiqueta("Líderes de proyecto:"));
 		spnLider = new JSpinner(new SpinnerNumberModel(1, 0, 50, 1));
 		panel.add(spnLider);
+		configurarSpinnerSoloFlechas(spnLider);
 
-		panel.add(new JLabel("Arquitectos:"));
+		panel.add(etiqueta("Arquitectos:"));
 		spnArquitecto = new JSpinner(new SpinnerNumberModel(1, 0, 50, 1));
 		panel.add(spnArquitecto);
+		configurarSpinnerSoloFlechas(spnArquitecto);
 
-		panel.add(new JLabel("Programadores:"));
+		panel.add(etiqueta("Programadores:"));
 		spnProgramador = new JSpinner(new SpinnerNumberModel(2, 0, 50, 1));
 		panel.add(spnProgramador);
+		configurarSpinnerSoloFlechas(spnProgramador);
 
-		panel.add(new JLabel("Testers:"));
+		panel.add(etiqueta("Testers:"));
 		spnTester = new JSpinner(new SpinnerNumberModel(1, 0, 50, 1));
 		panel.add(spnTester);
+		configurarSpinnerSoloFlechas(spnTester);
 
+		ChangeListener guardarRequerimientos = new ChangeListener() {
+			public void stateChanged(ChangeEvent e) {
+				persistirRequerimientos();
+			}
+		};
+		spnLider.addChangeListener(guardarRequerimientos);
+		spnArquitecto.addChangeListener(guardarRequerimientos);
+		spnProgramador.addChangeListener(guardarRequerimientos);
+		spnTester.addChangeListener(guardarRequerimientos);
+
+		TemaOscuro.estilizarContenedor(panel);
 		return panel;
+	}
+
+	private JLabel etiqueta(String texto) {
+		JLabel label = new JLabel(texto);
+		TemaOscuro.estilizarEtiqueta(label);
+		return label;
 	}
 
 	private JPanel crearPanelResultado() {
 		JPanel panel = new JPanel(new BorderLayout());
-		panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+		panel.setBorder(TemaOscuro.bordePanel());
+		panel.setBackground(TemaOscuro.FONDO_PANEL);
 
+		JPanel panelSuperior = new JPanel(new BorderLayout(5, 5));
 		btnResolver = new JButton("Resolver");
-		panel.add(btnResolver, BorderLayout.NORTH);
+		panelSuperior.add(btnResolver, BorderLayout.NORTH);
+
+		lblProgreso = new JLabel(" ");
+		barraProgreso = new JProgressBar(0, 100);
+		barraProgreso.setStringPainted(true);
+		barraProgreso.setVisible(false);
+		lblProgreso.setVisible(false);
+
+		JPanel panelProgreso = new JPanel(new BorderLayout(5, 2));
+		panelProgreso.add(lblProgreso, BorderLayout.NORTH);
+		panelProgreso.add(barraProgreso, BorderLayout.CENTER);
+		panelSuperior.add(panelProgreso, BorderLayout.CENTER);
+
+		panel.add(panelSuperior, BorderLayout.NORTH);
 
 		areaResultado = new JTextArea();
 		areaResultado.setEditable(false);
+		TemaOscuro.estilizarAreaTexto(areaResultado);
 		panel.add(new JScrollPane(areaResultado), BorderLayout.CENTER);
+
+		lblProgreso.setForeground(TemaOscuro.TEXTO);
 
 		btnResolver.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
@@ -178,7 +302,12 @@ public class VentanaPrincipal extends JFrame {
 			}
 		});
 
+		TemaOscuro.estilizarBoton(btnResolver);
 		return panel;
+	}
+
+	private void configurarSpinnerSoloFlechas(JSpinner spinner) {
+		TemaOscuro.estilizarSpinner(spinner, true);
 	}
 
 	// ---- Acciones (delegan en el controlador) ----
@@ -191,9 +320,41 @@ public class VentanaPrincipal extends JFrame {
 			controlador.agregarPersona(nombre, rol, calif);
 			txtNombre.setText("");
 			refrescarPersonas();
+			controlador.guardarEstadoSilencioso();
 		} catch (IllegalArgumentException ex) {
-			JOptionPane.showMessageDialog(this, ex.getMessage());
+			TemaOscuro.mostrarMensaje(this, ex.getMessage(), "Aviso", JOptionPane.WARNING_MESSAGE);
 		}
+	}
+
+	private void borrarPersona() {
+		try {
+			String nombre = txtNombreBorrar.getText().trim();
+			controlador.eliminarPersona(nombre);
+			txtNombreBorrar.setText("");
+			refrescarPersonas();
+			refrescarIncompatibilidades();
+			controlador.guardarEstadoSilencioso();
+		} catch (IllegalArgumentException ex) {
+			TemaOscuro.mostrarMensaje(this, ex.getMessage(), "Aviso", JOptionPane.WARNING_MESSAGE);
+		}
+	}
+
+	private void borrarTodasLasPersonas() {
+		if (controlador.getPersonas().isEmpty()) {
+			TemaOscuro.mostrarMensaje(this, "No hay personas para borrar.", "Aviso", JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
+		int opcion = TemaOscuro.mostrarConfirmacion(this,
+				"Se eliminarán todas las personas y sus incompatibilidades.\n¿Continuar?",
+				"Borrar todas las personas");
+		if (opcion != JOptionPane.YES_OPTION) {
+			return;
+		}
+		controlador.eliminarTodasLasPersonas();
+		txtNombreBorrar.setText("");
+		refrescarPersonas();
+		refrescarIncompatibilidades();
+		controlador.guardarEstadoSilencioso();
 	}
 
 	private void agregarIncompatibilidad() {
@@ -201,46 +362,262 @@ public class VentanaPrincipal extends JFrame {
 			String a = (String) cmbPersonaA.getSelectedItem();
 			String b = (String) cmbPersonaB.getSelectedItem();
 			if (a == null || b == null) {
-				JOptionPane.showMessageDialog(this, "Cargue personas primero");
+				TemaOscuro.mostrarMensaje(this, "Cargue personas primero", "Aviso", JOptionPane.WARNING_MESSAGE);
 				return;
 			}
 			controlador.agregarIncompatibilidad(a, b);
 			refrescarIncompatibilidades();
+			controlador.guardarEstadoSilencioso();
 		} catch (IllegalArgumentException ex) {
-			JOptionPane.showMessageDialog(this, ex.getMessage());
+			TemaOscuro.mostrarMensaje(this, ex.getMessage(), "Aviso", JOptionPane.WARNING_MESSAGE);
 		}
 	}
 
 	private void resolver() {
-		controlador.setRequerimiento(Rol.LIDER_DE_PROYECTO, (Integer) spnLider.getValue());
-		controlador.setRequerimiento(Rol.ARQUITECTO, (Integer) spnArquitecto.getValue());
-		controlador.setRequerimiento(Rol.PROGRAMADOR, (Integer) spnProgramador.getValue());
-		controlador.setRequerimiento(Rol.TESTER, (Integer) spnTester.getValue());
+		sincronizarRequerimientos();
 
 		btnResolver.setEnabled(false);
 		areaResultado.setText("Resolviendo...");
+		iniciarBarraProgreso();
 
-		controlador.resolverAsync(new java.util.function.Consumer<Equipo>() {
-			public void accept(Equipo equipo) {
-				if (equipo.estaVacio()) {
-					areaResultado.setText("No se encontró un equipo que cumpla los requerimientos.");
-				} else {
-					areaResultado.setText(equipo.toString());
-				}
-				btnResolver.setEnabled(true);
+		controlador.resolverAsync(null, new java.util.function.Consumer<ResultadoResolucion>() {
+			public void accept(ResultadoResolucion resultado) {
+				resolucionTerminada = true;
+				resultadoPendiente = resultado;
 			}
 		});
 	}
 
-	private void refrescarPersonas() {
-		StringBuilder sb = new StringBuilder();
-		List<Persona> personas = controlador.getPersonas();
-		for (Persona p : personas) {
-			sb.append(p).append("\n");
-		}
-		areaPersonas.setText(sb.toString());
+	private void iniciarBarraProgreso() {
+		detenerTimerProgreso();
+		resolucionTerminada = false;
+		faseFinalizacion = false;
+		resultadoPendiente = null;
+		progresoVisual = 0;
+		inicioResolucion = System.currentTimeMillis();
 
-		// actualizar combos de incompatibilidades
+		barraProgreso.setVisible(true);
+		lblProgreso.setVisible(true);
+		actualizarBarraProgresoMonotono(0);
+		lblProgreso.setText("Progreso de la búsqueda:");
+
+		timerProgreso = new Timer(INTERVALO_ANIMACION_MS, e -> avanzarBarraProgreso());
+		timerProgreso.start();
+	}
+
+	private void avanzarBarraProgreso() {
+		if (resolucionTerminada && !faseFinalizacion) {
+			faseFinalizacion = true;
+			inicioFaseFinal = System.currentTimeMillis();
+			progresoInicioFaseFinal = progresoVisual;
+		}
+
+		int objetivo;
+		if (!faseFinalizacion) {
+			long elapsed = System.currentTimeMillis() - inicioResolucion;
+			objetivo = (int) Math.min(PROGRESO_MAXIMO_BUSQUEDA,
+					elapsed * PROGRESO_MAXIMO_BUSQUEDA / (long) DURACION_SUBIDA_BUSQUEDA_MS);
+		} else {
+			long elapsedFinal = System.currentTimeMillis() - inicioFaseFinal;
+			int rango = 100 - progresoInicioFaseFinal;
+			objetivo = progresoInicioFaseFinal
+					+ (int) (rango * elapsedFinal / (double) DURACION_COMPLETAR_MS);
+			objetivo = Math.min(100, objetivo);
+		}
+
+		actualizarBarraProgresoMonotono(objetivo);
+
+		if (faseFinalizacion && progresoVisual >= 100) {
+			detenerTimerProgreso();
+			completarResolucion();
+		}
+	}
+
+	private void actualizarBarraProgresoMonotono(int porcentaje) {
+		int valor = Math.max(0, Math.min(100, porcentaje));
+		if (valor < progresoVisual) {
+			return;
+		}
+		progresoVisual = valor;
+		barraProgreso.setValue(progresoVisual);
+		barraProgreso.setString(progresoVisual + "%");
+	}
+
+	private void completarResolucion() {
+		actualizarBarraProgresoMonotono(100);
+		mostrarResultadoResolucion(resultadoPendiente);
+		ocultarBarraProgreso();
+		btnResolver.setEnabled(true);
+	}
+
+	private void detenerTimerProgreso() {
+		if (timerProgreso != null) {
+			timerProgreso.stop();
+			timerProgreso = null;
+		}
+	}
+
+	private void mostrarResultadoResolucion(ResultadoResolucion resultado) {
+		if (!resultado.esExito()) {
+			areaResultado.setText("");
+			ocultarBarraProgreso();
+			TemaOscuro.mostrarMensaje(this,
+					"Error al resolver: " + resultado.getMensajeError(),
+					"Error",
+					JOptionPane.ERROR_MESSAGE);
+			return;
+		}
+
+		StringBuilder sb = new StringBuilder();
+		if (resultado.getEquipo().estaVacio()) {
+			sb.append("No se encontró un equipo que cumpla los requerimientos.");
+		} else {
+			sb.append(resultado.getEquipo().toString());
+		}
+		sb.append("\n\n").append(resultado.getEstadisticas());
+		areaResultado.setText(sb.toString());
+		ocultarBarraProgreso();
+	}
+
+	private void ocultarBarraProgreso() {
+		barraProgreso.setVisible(false);
+		lblProgreso.setVisible(false);
+	}
+
+	private void sincronizarRequerimientos() {
+		controlador.setRequerimiento(Rol.LIDER_DE_PROYECTO, (Integer) spnLider.getValue());
+		controlador.setRequerimiento(Rol.ARQUITECTO, (Integer) spnArquitecto.getValue());
+		controlador.setRequerimiento(Rol.PROGRAMADOR, (Integer) spnProgramador.getValue());
+		controlador.setRequerimiento(Rol.TESTER, (Integer) spnTester.getValue());
+	}
+
+	private void persistirRequerimientos() {
+		sincronizarRequerimientos();
+		controlador.guardarEstadoSilencioso();
+	}
+
+	private void aplicarRequerimientosEnSpinners() {
+		Requerimientos req = controlador.getRequerimientos();
+		actualizarSpinnerSinEvento(spnLider, req.getCantidad(Rol.LIDER_DE_PROYECTO));
+		actualizarSpinnerSinEvento(spnArquitecto, req.getCantidad(Rol.ARQUITECTO));
+		actualizarSpinnerSinEvento(spnProgramador, req.getCantidad(Rol.PROGRAMADOR));
+		actualizarSpinnerSinEvento(spnTester, req.getCantidad(Rol.TESTER));
+	}
+
+	private void actualizarSpinnerSinEvento(JSpinner spinner, int valor) {
+		ChangeListener[] listeners = spinner.getChangeListeners();
+		for (ChangeListener listener : listeners) {
+			spinner.removeChangeListener(listener);
+		}
+		spinner.setValue(valor);
+		for (ChangeListener listener : listeners) {
+			spinner.addChangeListener(listener);
+		}
+	}
+
+	private void generarDatosPrueba() {
+		if (!controlador.getPersonas().isEmpty()) {
+			int opcion = TemaOscuro.mostrarConfirmacion(this,
+					"Se reemplazarán todas las personas e incompatibilidades actuales.\n¿Continuar?",
+					"Generar datos de prueba");
+			if (opcion != JOptionPane.YES_OPTION) {
+				return;
+			}
+		}
+		controlador.generarDatosPrueba();
+		aplicarRequerimientosEnSpinners();
+		controlador.guardarEstadoSilencioso();
+		refrescarPersonas();
+		refrescarIncompatibilidades();
+		TemaOscuro.mostrarMensaje(this,
+				"Se cargaron " + GeneradorDatosPrueba.EMPLEADOS_DEFAULT + " empleados y "
+						+ GeneradorDatosPrueba.INCOMPATIBILIDADES_DEFAULT + " incompatibilidades.",
+				"Datos de prueba",
+				JOptionPane.INFORMATION_MESSAGE);
+	}
+
+	private void cargarDatosPruebaIniciales() {
+		controlador.generarDatosPrueba();
+		aplicarRequerimientosEnSpinners();
+		refrescarPersonas();
+		refrescarIncompatibilidades();
+	}
+
+	private void cargarDatosGuardados() {
+		try {
+			if (controlador.cargarEstado()) {
+				aplicarRequerimientosEnSpinners();
+				refrescarPersonas();
+				refrescarIncompatibilidades();
+			}
+		} catch (IOException | ClassNotFoundException ex) {
+			TemaOscuro.mostrarMensaje(this,
+					"No se pudieron cargar los datos guardados: " + ex.getMessage(),
+					"Advertencia",
+					JOptionPane.WARNING_MESSAGE);
+		}
+	}
+
+	private void cerrarAplicacion() {
+		detenerTimerProgreso();
+		sincronizarRequerimientos();
+		try {
+			controlador.guardarEstado();
+		} catch (IOException ex) {
+			int opcion = TemaOscuro.mostrarConfirmacion(this,
+					"No se pudieron guardar los datos: " + ex.getMessage()
+							+ "\n¿Desea cerrar igualmente?",
+					"Error al guardar");
+			if (opcion != JOptionPane.YES_OPTION) {
+				return;
+			}
+		}
+		dispose();
+		System.exit(0);
+	}
+
+	private void refrescarPersonas() {
+		List<Persona> personas = controlador.getPersonas();
+		areaPersonas.setText(resumenPersonas(personas));
+		actualizarCombosPersonas(personas);
+	}
+
+	private String resumenPersonas(List<Persona> personas) {
+		if (personas.isEmpty()) {
+			return "";
+		}
+
+		StringBuilder sb = new StringBuilder();
+		sb.append("Total: ").append(personas.size()).append(" empleados\n");
+		for (Rol rol : Rol.values()) {
+			int cantidad = 0;
+			for (Persona p : personas) {
+				if (p.getRol() == rol) {
+					cantidad++;
+				}
+			}
+			sb.append("  ").append(rol).append(": ").append(cantidad).append("\n");
+		}
+
+		if (personas.size() > LIMITE_LISTADO_UI) {
+			sb.append("\n(Mostrando los primeros ").append(LIMITE_LISTADO_UI).append(")\n");
+		} else {
+			sb.append("\n");
+		}
+
+		int limite = Math.min(personas.size(), LIMITE_LISTADO_UI);
+		for (int i = 0; i < limite; i++) {
+			sb.append(personas.get(i)).append("\n");
+		}
+		return sb.toString();
+	}
+
+	private void actualizarCombosPersonas(List<Persona> personas) {
+		if (personas.size() > LIMITE_COMBO_UI) {
+			cmbPersonaA.setModel(new DefaultComboBoxModel<>());
+			cmbPersonaB.setModel(new DefaultComboBoxModel<>());
+			return;
+		}
 		String[] nombres = new String[personas.size()];
 		for (int i = 0; i < personas.size(); i++) {
 			nombres[i] = personas.get(i).getNombre();
@@ -250,9 +627,22 @@ public class VentanaPrincipal extends JFrame {
 	}
 
 	private void refrescarIncompatibilidades() {
+		List<Incompatibilidad> incompatibilidades = controlador.getIncompatibilidades();
+		if (incompatibilidades.isEmpty()) {
+			areaIncompat.setText("");
+			return;
+		}
+
 		StringBuilder sb = new StringBuilder();
-		for (Object i : controlador.getIncompatibilidades()) {
-			sb.append(i).append("\n");
+		sb.append("Total: ").append(incompatibilidades.size()).append(" incompatibilidades\n\n");
+
+		int limite = Math.min(incompatibilidades.size(), LIMITE_LISTADO_UI);
+		for (int i = 0; i < limite; i++) {
+			sb.append(incompatibilidades.get(i)).append("\n");
+		}
+		if (incompatibilidades.size() > LIMITE_LISTADO_UI) {
+			sb.append("\n(... ").append(incompatibilidades.size() - LIMITE_LISTADO_UI)
+					.append(" más no mostradas)");
 		}
 		areaIncompat.setText(sb.toString());
 	}

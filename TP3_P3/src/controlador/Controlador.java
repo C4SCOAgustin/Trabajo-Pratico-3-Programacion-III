@@ -1,5 +1,6 @@
 package controlador;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -7,10 +8,13 @@ import java.util.function.Consumer;
 import javax.swing.SwingWorker;
 
 import modelo.Equipo;
+import modelo.EstadoAplicacion;
+import modelo.EstadisticasSolver;
 import modelo.GestorIncompatibilidades;
 import modelo.Incompatibilidad;
 import modelo.Persona;
 import modelo.Requerimientos;
+import modelo.ResultadoResolucion;
 import modelo.Rol;
 import modelo.Solver;
 
@@ -31,6 +35,20 @@ public class Controlador {
 			throw new IllegalArgumentException("Ya existe una persona con ese nombre");
 		}
 		personas.add(p);
+	}
+
+	public void eliminarPersona(String nombre) {
+		Persona persona = buscarPersona(nombre);
+		if (persona == null) {
+			throw new IllegalArgumentException("No existe una persona con ese nombre");
+		}
+		personas.remove(persona);
+		gestor.eliminarInvolucrando(persona);
+	}
+
+	public void eliminarTodasLasPersonas() {
+		personas.clear();
+		gestor.limpiar();
 	}
 
 	public List<Persona> getPersonas() {
@@ -67,16 +85,97 @@ public class Controlador {
 		return requerimientos;
 	}
 
+	public void limpiarDatos() {
+		personas.clear();
+		gestor.limpiar();
+		for (Rol r : Rol.values()) {
+			requerimientos.setCantidad(r, 0);
+		}
+	}
+
+	/** Genera empleados con rol y calificación aleatorios, más incompatibilidades aleatorias. */
+	public void generarDatosPrueba(int cantidadEmpleados, int cantidadIncompatibilidades) {
+		GeneradorDatosPrueba.generar(personas, gestor, requerimientos,
+				cantidadEmpleados, cantidadIncompatibilidades);
+	}
+
+	public void generarDatosPrueba() {
+		generarDatosPrueba(GeneradorDatosPrueba.EMPLEADOS_DEFAULT,
+				GeneradorDatosPrueba.INCOMPATIBILIDADES_DEFAULT);
+	}
+
+	public Requerimientos copiarRequerimientos() {
+		Requerimientos copia = new Requerimientos();
+		copia.copiarDesde(requerimientos);
+		return copia;
+	}
+
+	public EstadoAplicacion exportarEstado() {
+		List<String[]> pares = new ArrayList<>();
+		for (Incompatibilidad i : gestor.getIncompatibilidades()) {
+			pares.add(new String[] { i.getA().getNombre(), i.getB().getNombre() });
+		}
+		return new EstadoAplicacion(personas, pares, copiarRequerimientos());
+	}
+
+	/** Guarda el estado en disco sin propagar errores a la vista. */
+	public void guardarEstadoSilencioso() {
+		try {
+			guardarEstado();
+		} catch (IOException ignored) {
+			// La vista puede informar al cerrar si falla el guardado definitivo.
+		}
+	}
+
+	public void importarEstado(EstadoAplicacion estado) {
+		personas.clear();
+		personas.addAll(estado.getPersonas());
+		gestor.limpiar();
+		for (String[] par : estado.getParesIncompatibles()) {
+			agregarIncompatibilidad(par[0], par[1]);
+		}
+		requerimientos.copiarDesde(estado.getRequerimientos());
+	}
+
+	public void guardarEstado() throws IOException {
+		Persistencia.guardar(exportarEstado());
+	}
+
+	/** @return true si se cargó un estado guardado */
+	public boolean cargarEstado() throws IOException, ClassNotFoundException {
+		EstadoAplicacion estado = Persistencia.cargar();
+		if (estado == null) {
+			return false;
+		}
+		importarEstado(estado);
+		return true;
+	}
+
 	/**
 	 * Resuelve el problema en un hilo separado.
-	 * @param alTerminar callback que recibe el equipo resultante (se ejecuta en el EDT).
+	 * @param onProgreso   recibe el porcentaje 0-100 (se procesa en el EDT vía {@code process}).
+	 * @param alTerminar   callback que recibe el resultado (se ejecuta en el EDT).
 	 */
-	public void resolverAsync(final Consumer<Equipo> alTerminar) {
-		SwingWorker<Equipo, Void> worker = new SwingWorker<Equipo, Void>() {
+	public void resolverAsync(final Consumer<Integer> onProgreso,
+			final Consumer<ResultadoResolucion> alTerminar) {
+		SwingWorker<ResultadoResolucion, Integer> worker = new SwingWorker<ResultadoResolucion, Integer>() {
 			@Override
-			protected Equipo doInBackground() {
-				Solver solver = new Solver(personas, gestor, requerimientos);
-				return solver.resolver();
+			protected ResultadoResolucion doInBackground() {
+				try {
+					Solver solver = new Solver(personas, gestor, requerimientos,
+							porcentaje -> publish(porcentaje));
+					Equipo equipo = solver.resolver();
+					return ResultadoResolucion.exito(equipo, solver.getUltimasEstadisticas());
+				} catch (RuntimeException e) {
+					return ResultadoResolucion.error(e.getMessage());
+				}
+			}
+
+			@Override
+			protected void process(List<Integer> avances) {
+				if (onProgreso != null && !avances.isEmpty()) {
+					onProgreso.accept(avances.get(avances.size() - 1));
+				}
 			}
 
 			@Override
@@ -84,7 +183,8 @@ public class Controlador {
 				try {
 					alTerminar.accept(get());
 				} catch (Exception e) {
-					alTerminar.accept(new Equipo());
+					String msg = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
+					alTerminar.accept(ResultadoResolucion.error(msg));
 				}
 			}
 		};
@@ -92,8 +192,13 @@ public class Controlador {
 	}
 
 	/** Resolución sincrónica, útil para tests. */
-	public Equipo resolver() {
-		Solver solver = new Solver(personas, gestor, requerimientos);
-		return solver.resolver();
+	public ResultadoResolucion resolver() {
+		try {
+			Solver solver = new Solver(personas, gestor, requerimientos);
+			Equipo equipo = solver.resolver();
+			return ResultadoResolucion.exito(equipo, solver.getUltimasEstadisticas());
+		} catch (RuntimeException e) {
+			return ResultadoResolucion.error(e.getMessage());
+		}
 	}
 }

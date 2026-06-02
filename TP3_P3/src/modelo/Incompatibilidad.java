@@ -24,6 +24,11 @@ public class Incompatibilidad {
 		return b;
 	}
 
+	/** Indica si esta incompatibilidad involucra a la persona dada. */
+	public boolean involucra(Persona persona) {
+		return a.equals(persona) || b.equals(persona);
+	}
+
 	/** Indica si esta incompatibilidad involucra a las dos personas dadas (sin importar el orden). */
 	public boolean involucra(Persona p1, Persona p2) {
 		return (a.equals(p1) && b.equals(p2)) || (a.equals(p2) && b.equals(p1));

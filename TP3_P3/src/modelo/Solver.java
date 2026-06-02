@@ -2,6 +2,7 @@ package modelo;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.IntConsumer;
 
 /**
  * Resuelve el problema del equipo ideal mediante backtracking.
@@ -16,12 +17,24 @@ public class Solver {
 
 	private Equipo mejorEquipo;
 	private int mejorPuntaje;
-	private long llamadasCasoBase; // estadística: veces que se completó un equipo candidato
+	private long llamadasCasoBase;
+	private long nodosVisitados;
+	private long nodosEstimados;
+	private int ultimoPorcentajeReportado;
+	private EstadisticasSolver ultimasEstadisticas;
+	private final IntConsumer reporteProgreso;
+	private static final long INTERVALO_REPORTE_PROGRESO = 1000L;
 
 	public Solver(List<Persona> personas, GestorIncompatibilidades gestor, Requerimientos requerimientos) {
+		this(personas, gestor, requerimientos, null);
+	}
+
+	public Solver(List<Persona> personas, GestorIncompatibilidades gestor, Requerimientos requerimientos,
+			IntConsumer reporteProgreso) {
 		this.personas = new ArrayList<>(personas);
 		this.gestor = gestor;
 		this.requerimientos = requerimientos;
+		this.reporteProgreso = reporteProgreso;
 	}
 
 	/** Ejecuta la búsqueda y devuelve el mejor equipo encontrado (vacío si no hay solución). */
@@ -29,8 +42,19 @@ public class Solver {
 		mejorEquipo = new Equipo();
 		mejorPuntaje = -1;
 		llamadasCasoBase = 0;
+		nodosVisitados = 0;
+		ultimoPorcentajeReportado = 0;
+		nodosEstimados = estimarNodos(personas.size());
+		long inicio = System.nanoTime();
 		backtrack(0, new ArrayList<Persona>(), 0);
+		long tiempoMs = (System.nanoTime() - inicio) / 1_000_000L;
+		ultimasEstadisticas = new EstadisticasSolver(llamadasCasoBase, tiempoMs);
+		notificarProgreso(100);
 		return mejorEquipo;
+	}
+
+	public EstadisticasSolver getUltimasEstadisticas() {
+		return ultimasEstadisticas;
 	}
 
 	/**
@@ -39,6 +63,13 @@ public class Solver {
 	 * @param puntaje   suma de calificaciones de las seleccionadas
 	 */
 	private void backtrack(int indice, List<Persona> actuales, int puntaje) {
+		nodosVisitados++;
+		if (reporteProgreso != null && nodosVisitados % INTERVALO_REPORTE_PROGRESO == 0
+				&& nodosEstimados > 0) {
+			int porcentaje = (int) Math.min(99, (nodosVisitados * 100L) / nodosEstimados);
+			notificarProgreso(porcentaje);
+		}
+
 		// Caso base: ya consideramos todas las personas.
 		if (indice == personas.size()) {
 			llamadasCasoBase++;
@@ -85,7 +116,19 @@ public class Solver {
 		return true;
 	}
 
-	public long getLlamadasCasoBase() {
-		return llamadasCasoBase;
+	private void notificarProgreso(int porcentaje) {
+		if (reporteProgreso != null && porcentaje > ultimoPorcentajeReportado) {
+			ultimoPorcentajeReportado = porcentaje;
+			reporteProgreso.accept(porcentaje);
+		}
 	}
+
+	private long estimarNodos(int cantidadPersonas) {
+		if (cantidadPersonas <= 0) {
+			return 1;
+		}
+		int exponente = Math.min(cantidadPersonas, 20);
+		return 1L << exponente;
+	}
+
 }
