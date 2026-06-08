@@ -3,6 +3,7 @@ package vista;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Dimension;
 import java.awt.Font;
 
 import javax.swing.BorderFactory;
@@ -55,6 +56,19 @@ public final class TemaOscuro {
 		UIManager.put("nimbusRed", new ColorUIResource(ACENTO));
 		UIManager.put("nimbusSelectedText", new ColorUIResource(TEXTO));
 		UIManager.put("nimbusSelectionBackground", new ColorUIResource(SELECCION));
+
+		// Fuente por defecto más grande y legible
+		int tamanoFuente = 14;
+		java.awt.Font fuentePorDefecto = new Font("Segoe UI", Font.PLAIN, tamanoFuente);
+		UIManager.put("defaultFont", fuentePorDefecto);
+		UIManager.put("Label.font", fuentePorDefecto);
+		UIManager.put("Button.font", fuentePorDefecto);
+		UIManager.put("TextField.font", fuentePorDefecto);
+		UIManager.put("TextArea.font", fuentePorDefecto);
+		UIManager.put("ComboBox.font", fuentePorDefecto);
+		UIManager.put("Spinner.font", fuentePorDefecto);
+		UIManager.put("TabbedPane.font", fuentePorDefecto);
+		UIManager.put("ProgressBar.font", fuentePorDefecto);
 
 		UIManager.put("Panel.background", new ColorUIResource(FONDO_PANEL));
 		UIManager.put("Panel.foreground", new ColorUIResource(TEXTO));
@@ -144,7 +158,7 @@ public final class TemaOscuro {
 		area.setBackground(FONDO_CAMPO);
 		area.setForeground(TEXTO);
 		area.setCaretColor(TEXTO);
-		area.setFont(new Font("Monospaced", Font.PLAIN, 12));
+		area.setFont(new Font("Monospaced", Font.PLAIN, 14));
 		area.setBorder(bordeCampo());
 	}
 
@@ -193,7 +207,18 @@ public final class TemaOscuro {
 			campo.setBorder(bordeCampo());
 			if (soloFlechas) {
 				campo.setEditable(false);
+				// reducir columnas para que el cuadro sea más pequeño (1 caracter)
+				campo.setColumns(1);
+			} else {
+				campo.setColumns(3);
 			}
+
+			// Ajustar tamaño preferido del spinner para respetar el ancho del campo
+			int charWidth = campo.getFontMetrics(campo.getFont()).charWidth('0');
+			int targetWidth = Math.max(24, charWidth * (campo.getColumns() + 1));
+			Dimension d = spinner.getPreferredSize();
+			d.width = targetWidth + 32; // espacio para botones
+			spinner.setPreferredSize(d);
 		}
 
 		for (Component hijo : spinner.getComponents()) {

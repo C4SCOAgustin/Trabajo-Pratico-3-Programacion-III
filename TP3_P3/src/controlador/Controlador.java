@@ -1,6 +1,5 @@
 package controlador;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -9,10 +8,12 @@ import javax.swing.SwingWorker;
 
 import modelo.Equipo;
 import modelo.EstadisticasSolver;
-import modelo.EstadoAplicacion;
+
 import modelo.GestorIncompatibilidades;
 import modelo.Incompatibilidad;
 import modelo.Persona;
+import modelo.AlmacenPersonas;
+import java.io.IOException;
 import modelo.Requerimientos;
 import modelo.ResultadoResolucion;
 import modelo.Rol;
@@ -29,12 +30,28 @@ public class Controlador {
 	private final GestorIncompatibilidades gestor = new GestorIncompatibilidades();
 	private final Requerimientos requerimientos = new Requerimientos();
 
+	public Controlador() {
+		try {
+			List<Persona> cargadas = AlmacenPersonas.cargar();
+			if (cargadas != null && !cargadas.isEmpty()) {
+				personas.addAll(cargadas);
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
 	public void agregarPersona(String nombre, Rol rol, int calificacion) {
 		Persona p = new Persona(nombre, rol, calificacion);
 		if (personas.contains(p)) {
 			throw new IllegalArgumentException("Ya existe una persona con ese nombre");
 		}
 		personas.add(p);
+		try {
+			AlmacenPersonas.guardar(personas);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 
 	public void eliminarPersona(String nombre) {
@@ -44,11 +61,21 @@ public class Controlador {
 		}
 		personas.remove(persona);
 		gestor.eliminarInvolucrando(persona);
+		try {
+			AlmacenPersonas.guardar(personas);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 
 	public void eliminarTodasLasPersonas() {
 		personas.clear();
 		gestor.limpiar();
+		try {
+			AlmacenPersonas.guardar(personas);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 
 	public List<Persona> getPersonas() {
@@ -113,46 +140,7 @@ public class Controlador {
 		return copia;
 	}
 
-	public EstadoAplicacion exportarEstado() {
-		List<String[]> pares = new ArrayList<>();
-		for (Incompatibilidad i : gestor.getIncompatibilidades()) {
-			pares.add(new String[] { i.getA().getNombre(), i.getB().getNombre() });
-		}
-		return new EstadoAplicacion(personas, pares, copiarRequerimientos());
-	}
 
-	/** Guarda el estado en disco sin propagar errores a la vista. */
-	public void guardarEstadoSilencioso() {
-		try {
-			guardarEstado();
-		} catch (IOException ignored) {
-			// La vista puede informar al cerrar si falla el guardado definitivo.
-		}
-	}
-
-	public void importarEstado(EstadoAplicacion estado) {
-		personas.clear();
-		personas.addAll(estado.getPersonas());
-		gestor.limpiar();
-		for (String[] par : estado.getParesIncompatibles()) {
-			agregarIncompatibilidad(par[0], par[1]);
-		}
-		requerimientos.copiarDesde(estado.getRequerimientos());
-	}
-
-	public void guardarEstado() throws IOException {
-		Persistencia.guardar(exportarEstado());
-	}
-
-	/** @return true si se cargó un estado guardado */
-	public boolean cargarEstado() throws IOException, ClassNotFoundException {
-		EstadoAplicacion estado = Persistencia.cargar();
-		if (estado == null) {
-			return false;
-		}
-		importarEstado(estado);
-		return true;
-	}
 
 	/**
 	 * Resuelve el problema en un hilo separado.

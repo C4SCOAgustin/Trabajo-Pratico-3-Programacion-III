@@ -7,7 +7,6 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.io.IOException;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -34,7 +33,6 @@ import controlador.Controlador;
 import modelo.EstadisticasSolver;
 import modelo.Incompatibilidad;
 import modelo.Persona;
-import modelo.Requerimientos;
 import modelo.ResultadoResolucion;
 import modelo.Rol;
 
@@ -106,11 +104,14 @@ public class VentanaPrincipal extends JFrame {
 		addWindowListener(new WindowAdapter() {
 			@Override
 			public void windowClosing(WindowEvent e) {
-				cerrarAplicacion();
+				dispose();
+				System.exit(0);
 			}
 		});
 
-		cargarDatosGuardados();
+		// Actualizar UI con datos cargados
+		refrescarPersonas();
+		refrescarIncompatibilidades();
 	}
 
 	private JPanel crearPanelPersonas() {
@@ -261,15 +262,15 @@ public class VentanaPrincipal extends JFrame {
 		panel.add(spnTester);
 		configurarSpinnerSoloFlechas(spnTester);
 
-		ChangeListener guardarRequerimientos = new ChangeListener() {
+		ChangeListener sincronizarRequerimientos = new ChangeListener() {
 			public void stateChanged(ChangeEvent e) {
-				persistirRequerimientos();
+				sincronizarRequerimientos();
 			}
 		};
-		spnLider.addChangeListener(guardarRequerimientos);
-		spnArquitecto.addChangeListener(guardarRequerimientos);
-		spnProgramador.addChangeListener(guardarRequerimientos);
-		spnTester.addChangeListener(guardarRequerimientos);
+		spnLider.addChangeListener(sincronizarRequerimientos);
+		spnArquitecto.addChangeListener(sincronizarRequerimientos);
+		spnProgramador.addChangeListener(sincronizarRequerimientos);
+		spnTester.addChangeListener(sincronizarRequerimientos);
 
 		TemaOscuro.estilizarContenedor(panel);
 		return panel;
@@ -334,7 +335,7 @@ public class VentanaPrincipal extends JFrame {
 			controlador.agregarPersona(nombre, rol, calif);
 			txtNombre.setText("");
 			refrescarPersonas();
-			controlador.guardarEstadoSilencioso();
+
 		} catch (IllegalArgumentException ex) {
 			TemaOscuro.mostrarMensaje(this, ex.getMessage(), "Aviso", JOptionPane.WARNING_MESSAGE);
 		}
@@ -347,7 +348,7 @@ public class VentanaPrincipal extends JFrame {
 			txtNombreBorrar.setText("");
 			refrescarPersonas();
 			refrescarIncompatibilidades();
-			controlador.guardarEstadoSilencioso();
+
 		} catch (IllegalArgumentException ex) {
 			TemaOscuro.mostrarMensaje(this, ex.getMessage(), "Aviso", JOptionPane.WARNING_MESSAGE);
 		}
@@ -368,7 +369,6 @@ public class VentanaPrincipal extends JFrame {
 		txtNombreBorrar.setText("");
 		refrescarPersonas();
 		refrescarIncompatibilidades();
-		controlador.guardarEstadoSilencioso();
 	}
 
 	private void agregarIncompatibilidad() {
@@ -381,7 +381,7 @@ public class VentanaPrincipal extends JFrame {
 			}
 			controlador.agregarIncompatibilidad(a, b);
 			refrescarIncompatibilidades();
-			controlador.guardarEstadoSilencioso();
+
 		} catch (IllegalArgumentException ex) {
 			TemaOscuro.mostrarMensaje(this, ex.getMessage(), "Aviso", JOptionPane.WARNING_MESSAGE);
 		}
@@ -397,7 +397,7 @@ public class VentanaPrincipal extends JFrame {
 			}
 			controlador.eliminarIncompatibilidad(a, b);
 			refrescarIncompatibilidades();
-			controlador.guardarEstadoSilencioso();
+
 		} catch (IllegalArgumentException ex) {
 			TemaOscuro.mostrarMensaje(this, ex.getMessage(), "Aviso", JOptionPane.WARNING_MESSAGE);
 		}
@@ -533,62 +533,6 @@ public class VentanaPrincipal extends JFrame {
 		controlador.setRequerimiento(Rol.ARQUITECTO, (Integer) spnArquitecto.getValue());
 		controlador.setRequerimiento(Rol.PROGRAMADOR, (Integer) spnProgramador.getValue());
 		controlador.setRequerimiento(Rol.TESTER, (Integer) spnTester.getValue());
-	}
-
-	private void persistirRequerimientos() {
-		sincronizarRequerimientos();
-		controlador.guardarEstadoSilencioso();
-	}
-
-	private void aplicarRequerimientosEnSpinners() {
-		Requerimientos req = controlador.getRequerimientos();
-		actualizarSpinnerSinEvento(spnLider, req.getCantidad(Rol.LIDER_DE_PROYECTO));
-		actualizarSpinnerSinEvento(spnArquitecto, req.getCantidad(Rol.ARQUITECTO));
-		actualizarSpinnerSinEvento(spnProgramador, req.getCantidad(Rol.PROGRAMADOR));
-		actualizarSpinnerSinEvento(spnTester, req.getCantidad(Rol.TESTER));
-	}
-
-	private void actualizarSpinnerSinEvento(JSpinner spinner, int valor) {
-		ChangeListener[] listeners = spinner.getChangeListeners();
-		for (ChangeListener listener : listeners) {
-			spinner.removeChangeListener(listener);
-		}
-		spinner.setValue(valor);
-		for (ChangeListener listener : listeners) {
-			spinner.addChangeListener(listener);
-		}
-	}
-	private void cargarDatosGuardados() {
-		try {
-			if (controlador.cargarEstado()) {
-				aplicarRequerimientosEnSpinners();
-				refrescarPersonas();
-				refrescarIncompatibilidades();
-			}
-		} catch (IOException | ClassNotFoundException ex) {
-			TemaOscuro.mostrarMensaje(this,
-					"No se pudieron cargar los datos guardados: " + ex.getMessage(),
-					"Advertencia",
-					JOptionPane.WARNING_MESSAGE);
-		}
-	}
-
-	private void cerrarAplicacion() {
-		detenerTimerProgreso();
-		sincronizarRequerimientos();
-		try {
-			controlador.guardarEstado();
-		} catch (IOException ex) {
-			int opcion = TemaOscuro.mostrarConfirmacion(this,
-					"No se pudieron guardar los datos: " + ex.getMessage()
-							+ "\n¿Desea cerrar igualmente?",
-					"Error al guardar");
-			if (opcion != JOptionPane.YES_OPTION) {
-				return;
-			}
-		}
-		dispose();
-		System.exit(0);
 	}
 
 	private void refrescarPersonas() {
