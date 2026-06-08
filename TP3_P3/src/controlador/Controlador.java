@@ -8,8 +8,8 @@ import java.util.function.Consumer;
 import javax.swing.SwingWorker;
 
 import modelo.Equipo;
-import modelo.EstadoAplicacion;
 import modelo.EstadisticasSolver;
+import modelo.EstadoAplicacion;
 import modelo.GestorIncompatibilidades;
 import modelo.Incompatibilidad;
 import modelo.Persona;
@@ -73,6 +73,20 @@ public class Controlador {
 		gestor.agregar(new Incompatibilidad(a, b));
 	}
 
+	public void eliminarIncompatibilidad(String nombreA, String nombreB) {
+		Persona a = buscarPersona(nombreA);
+		Persona b = buscarPersona(nombreB);
+		if (a == null || b == null) {
+			throw new IllegalArgumentException("Ambas personas deben existir");
+		}
+		if (a.equals(b)) {
+			throw new IllegalArgumentException("No se puede eliminar una incompatibilidad entre la misma persona");
+		}
+		if (!gestor.eliminar(a, b)) {
+			throw new IllegalArgumentException("No existe esa incompatibilidad");
+		}
+	}
+
 	public List<Incompatibilidad> getIncompatibilidades() {
 		return gestor.getIncompatibilidades();
 	}
@@ -91,17 +105,6 @@ public class Controlador {
 		for (Rol r : Rol.values()) {
 			requerimientos.setCantidad(r, 0);
 		}
-	}
-
-	/** Genera empleados con rol y calificación aleatorios, más incompatibilidades aleatorias. */
-	public void generarDatosPrueba(int cantidadEmpleados, int cantidadIncompatibilidades) {
-		GeneradorDatosPrueba.generar(personas, gestor, requerimientos,
-				cantidadEmpleados, cantidadIncompatibilidades);
-	}
-
-	public void generarDatosPrueba() {
-		generarDatosPrueba(GeneradorDatosPrueba.EMPLEADOS_DEFAULT,
-				GeneradorDatosPrueba.INCOMPATIBILIDADES_DEFAULT);
 	}
 
 	public Requerimientos copiarRequerimientos() {
@@ -153,28 +156,30 @@ public class Controlador {
 
 	/**
 	 * Resuelve el problema en un hilo separado.
-	 * @param onProgreso   recibe el porcentaje 0-100 (se procesa en el EDT vía {@code process}).
+	 * @param onEstadisticas recibe estadísticas parciales durante la ejecución.
 	 * @param alTerminar   callback que recibe el resultado (se ejecuta en el EDT).
 	 */
-	public void resolverAsync(final Consumer<Integer> onProgreso,
+	public void resolverAsync(final Consumer<EstadisticasSolver> onEstadisticas,
 			final Consumer<ResultadoResolucion> alTerminar) {
-		SwingWorker<ResultadoResolucion, Integer> worker = new SwingWorker<ResultadoResolucion, Integer>() {
+		SwingWorker<ResultadoResolucion, EstadisticasSolver> worker =
+				new SwingWorker<ResultadoResolucion, EstadisticasSolver>() {
 			@Override
 			protected ResultadoResolucion doInBackground() {
 				try {
-					Solver solver = new Solver(personas, gestor, requerimientos,
-							porcentaje -> publish(porcentaje));
-					Equipo equipo = solver.resolver();
-					return ResultadoResolucion.exito(equipo, solver.getUltimasEstadisticas());
+					final Solver[] solverHolder = new Solver[1];
+					solverHolder[0] = new Solver(personas, gestor, requerimientos,
+							porcentaje -> publish(solverHolder[0].getUltimasEstadisticas()));
+					Equipo equipo = solverHolder[0].resolver();
+					return ResultadoResolucion.exito(equipo, solverHolder[0].getUltimasEstadisticas());
 				} catch (RuntimeException e) {
 					return ResultadoResolucion.error(e.getMessage());
 				}
 			}
 
 			@Override
-			protected void process(List<Integer> avances) {
-				if (onProgreso != null && !avances.isEmpty()) {
-					onProgreso.accept(avances.get(avances.size() - 1));
+			protected void process(List<EstadisticasSolver> estadisticas) {
+				if (onEstadisticas != null && !estadisticas.isEmpty()) {
+					onEstadisticas.accept(estadisticas.get(estadisticas.size() - 1));
 				}
 			}
 

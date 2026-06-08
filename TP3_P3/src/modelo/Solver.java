@@ -22,6 +22,7 @@ public class Solver {
 	private long nodosEstimados;
 	private int ultimoPorcentajeReportado;
 	private EstadisticasSolver ultimasEstadisticas;
+	private long inicioEjecucionNano;
 	private final IntConsumer reporteProgreso;
 	private static final long INTERVALO_REPORTE_PROGRESO = 1000L;
 
@@ -45,9 +46,9 @@ public class Solver {
 		nodosVisitados = 0;
 		ultimoPorcentajeReportado = 0;
 		nodosEstimados = estimarNodos(personas.size());
-		long inicio = System.nanoTime();
+		inicioEjecucionNano = System.nanoTime();
 		backtrack(0, new ArrayList<Persona>(), 0);
-		long tiempoMs = (System.nanoTime() - inicio) / 1_000_000L;
+		long tiempoMs = (System.nanoTime() - inicioEjecucionNano) / 1_000_000L;
 		ultimasEstadisticas = new EstadisticasSolver(llamadasCasoBase, tiempoMs);
 		notificarProgreso(100);
 		return mejorEquipo;
@@ -119,6 +120,8 @@ public class Solver {
 	private void notificarProgreso(int porcentaje) {
 		if (reporteProgreso != null && porcentaje > ultimoPorcentajeReportado) {
 			ultimoPorcentajeReportado = porcentaje;
+			long tiempoMs = (System.nanoTime() - inicioEjecucionNano) / 1_000_000L;
+			ultimasEstadisticas = new EstadisticasSolver(llamadasCasoBase, tiempoMs);
 			reporteProgreso.accept(porcentaje);
 		}
 	}

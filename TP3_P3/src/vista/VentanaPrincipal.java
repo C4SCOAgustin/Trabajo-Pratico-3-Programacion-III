@@ -1,6 +1,7 @@
 package vista;
 
 import java.awt.BorderLayout;
+import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -8,6 +9,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
 import java.util.List;
+import java.util.function.Consumer;
 
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.JButton;
@@ -26,10 +28,10 @@ import javax.swing.SpinnerNumberModel;
 import javax.swing.Timer;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
-import javax.swing.border.EmptyBorder;
+
 
 import controlador.Controlador;
-import controlador.GeneradorDatosPrueba;
+import modelo.EstadisticasSolver;
 import modelo.Incompatibilidad;
 import modelo.Persona;
 import modelo.Requerimientos;
@@ -109,9 +111,6 @@ public class VentanaPrincipal extends JFrame {
 		});
 
 		cargarDatosGuardados();
-		if (controlador.getPersonas().isEmpty()) {
-			cargarDatosPruebaIniciales();
-		}
 	}
 
 	private JPanel crearPanelPersonas() {
@@ -119,37 +118,51 @@ public class VentanaPrincipal extends JFrame {
 		panel.setBorder(TemaOscuro.bordePanel());
 		panel.setBackground(TemaOscuro.FONDO_PANEL);
 
-		JPanel form = new JPanel(new GridLayout(8, 2, 5, 5));
+		JPanel form = new JPanel(new GridLayout(6, 1, 5, 10));
 		form.setBackground(TemaOscuro.FONDO_PANEL);
-		form.add(etiqueta("Nombre:"));
+
+		JPanel filaNombre = new JPanel(new BorderLayout(5, 5));
+		filaNombre.setBackground(TemaOscuro.FONDO_PANEL);
+		filaNombre.add(etiqueta("Nombre:"), BorderLayout.WEST);
 		txtNombre = new JTextField();
-		form.add(txtNombre);
+		filaNombre.add(txtNombre, BorderLayout.CENTER);
+		form.add(filaNombre);
 
-		form.add(etiqueta("Rol:"));
+		JPanel filaRol = new JPanel(new BorderLayout(5, 5));
+		filaRol.setBackground(TemaOscuro.FONDO_PANEL);
+		filaRol.add(etiqueta("Rol:"), BorderLayout.WEST);
 		cmbRol = new JComboBox<>(Rol.values());
-		form.add(cmbRol);
+		filaRol.add(cmbRol, BorderLayout.CENTER);
+		form.add(filaRol);
 
-		form.add(etiqueta("Calificación (1-5):"));
+		JPanel filaCalificacion = new JPanel(new BorderLayout(5, 5));
+		filaCalificacion.setBackground(TemaOscuro.FONDO_PANEL);
+		filaCalificacion.add(etiqueta("Calificación (1-5):"), BorderLayout.WEST);
 		spnCalificacion = new JSpinner(new SpinnerNumberModel(3, 1, 5, 1));
-		form.add(spnCalificacion);
+		filaCalificacion.add(spnCalificacion, BorderLayout.CENTER);
 		configurarSpinnerSoloFlechas(spnCalificacion);
+		form.add(filaCalificacion);
 
 		JButton btnAgregar = new JButton("Agregar persona");
-		form.add(btnAgregar);
+		JPanel filaAgregar = new JPanel(new FlowLayout(FlowLayout.CENTER));
+		filaAgregar.setBackground(TemaOscuro.FONDO_PANEL);
+		filaAgregar.add(btnAgregar);
+		form.add(filaAgregar);
 
-		JButton btnGenerar = new JButton("Generar " + GeneradorDatosPrueba.EMPLEADOS_DEFAULT
-				+ " empleados (" + GeneradorDatosPrueba.INCOMPATIBILIDADES_DEFAULT + " incompat.)");
-		form.add(btnGenerar);
-
-		form.add(new JLabel("Nombre a borrar:"));
+		JPanel filaBorrarNombre = new JPanel(new BorderLayout(5, 5));
+		filaBorrarNombre.setBackground(TemaOscuro.FONDO_PANEL);
+		filaBorrarNombre.add(etiqueta("Nombre a borrar:"), BorderLayout.WEST);
 		txtNombreBorrar = new JTextField();
-		form.add(txtNombreBorrar);
-
+		filaBorrarNombre.add(txtNombreBorrar, BorderLayout.CENTER);
 		JButton btnBorrarPersona = new JButton("Borrar persona");
-		form.add(btnBorrarPersona);
+		filaBorrarNombre.add(btnBorrarPersona, BorderLayout.EAST);
+		form.add(filaBorrarNombre);
 
 		JButton btnBorrarTodas = new JButton("Borrar todas las personas");
-		form.add(btnBorrarTodas);
+		JPanel filaBorrarTodas = new JPanel(new FlowLayout(FlowLayout.CENTER));
+		filaBorrarTodas.setBackground(TemaOscuro.FONDO_PANEL);
+		filaBorrarTodas.add(btnBorrarTodas);
+		form.add(filaBorrarTodas);
 
 		panel.add(form, BorderLayout.NORTH);
 
@@ -161,12 +174,6 @@ public class VentanaPrincipal extends JFrame {
 		btnAgregar.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				agregarPersona();
-			}
-		});
-
-		btnGenerar.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent e) {
-				generarDatosPrueba();
 			}
 		});
 
@@ -191,7 +198,7 @@ public class VentanaPrincipal extends JFrame {
 		panel.setBorder(TemaOscuro.bordePanel());
 		panel.setBackground(TemaOscuro.FONDO_PANEL);
 
-		JPanel form = new JPanel(new GridLayout(3, 2, 5, 5));
+		JPanel form = new JPanel(new GridLayout(4, 2, 5, 5));
 		form.setBackground(TemaOscuro.FONDO_PANEL);
 		form.add(etiqueta("Persona A:"));
 		cmbPersonaA = new JComboBox<>();
@@ -202,8 +209,9 @@ public class VentanaPrincipal extends JFrame {
 		form.add(cmbPersonaB);
 
 		JButton btnAgregar = new JButton("Agregar incompatibilidad");
+		JButton btnEliminar = new JButton("Eliminar incompatibilidad");
 		form.add(btnAgregar);
-		form.add(etiqueta(""));
+		form.add(btnEliminar);
 
 		panel.add(form, BorderLayout.NORTH);
 
@@ -215,6 +223,12 @@ public class VentanaPrincipal extends JFrame {
 		btnAgregar.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				agregarIncompatibilidad();
+			}
+		});
+
+		btnEliminar.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				eliminarIncompatibilidad();
 			}
 		});
 
@@ -373,19 +387,49 @@ public class VentanaPrincipal extends JFrame {
 		}
 	}
 
+	private void eliminarIncompatibilidad() {
+		try {
+			String a = (String) cmbPersonaA.getSelectedItem();
+			String b = (String) cmbPersonaB.getSelectedItem();
+			if (a == null || b == null) {
+				TemaOscuro.mostrarMensaje(this, "Cargue personas primero", "Aviso", JOptionPane.WARNING_MESSAGE);
+				return;
+			}
+			controlador.eliminarIncompatibilidad(a, b);
+			refrescarIncompatibilidades();
+			controlador.guardarEstadoSilencioso();
+		} catch (IllegalArgumentException ex) {
+			TemaOscuro.mostrarMensaje(this, ex.getMessage(), "Aviso", JOptionPane.WARNING_MESSAGE);
+		}
+	}
+
 	private void resolver() {
 		sincronizarRequerimientos();
 
 		btnResolver.setEnabled(false);
-		areaResultado.setText("Resolviendo...");
+		areaResultado.setText("Resolviendo...\n\n");
 		iniciarBarraProgreso();
 
-		controlador.resolverAsync(null, new java.util.function.Consumer<ResultadoResolucion>() {
+		controlador.resolverAsync(new Consumer<EstadisticasSolver>() {
+			public void accept(EstadisticasSolver estadisticas) {
+				mostrarEstadisticasEnEjecucion(estadisticas);
+			}
+		}, new Consumer<ResultadoResolucion>() {
 			public void accept(ResultadoResolucion resultado) {
 				resolucionTerminada = true;
 				resultadoPendiente = resultado;
 			}
 		});
+	}
+
+	private void mostrarEstadisticasEnEjecucion(EstadisticasSolver estadisticas) {
+		if (estadisticas == null) {
+			return;
+		}
+		StringBuilder sb = new StringBuilder();
+		sb.append("Resolviendo...\n\n");
+		sb.append(estadisticas);
+		areaResultado.setText(sb.toString());
 	}
 
 	private void iniciarBarraProgreso() {
@@ -514,35 +558,6 @@ public class VentanaPrincipal extends JFrame {
 			spinner.addChangeListener(listener);
 		}
 	}
-
-	private void generarDatosPrueba() {
-		if (!controlador.getPersonas().isEmpty()) {
-			int opcion = TemaOscuro.mostrarConfirmacion(this,
-					"Se reemplazarán todas las personas e incompatibilidades actuales.\n¿Continuar?",
-					"Generar datos de prueba");
-			if (opcion != JOptionPane.YES_OPTION) {
-				return;
-			}
-		}
-		controlador.generarDatosPrueba();
-		aplicarRequerimientosEnSpinners();
-		controlador.guardarEstadoSilencioso();
-		refrescarPersonas();
-		refrescarIncompatibilidades();
-		TemaOscuro.mostrarMensaje(this,
-				"Se cargaron " + GeneradorDatosPrueba.EMPLEADOS_DEFAULT + " empleados y "
-						+ GeneradorDatosPrueba.INCOMPATIBILIDADES_DEFAULT + " incompatibilidades.",
-				"Datos de prueba",
-				JOptionPane.INFORMATION_MESSAGE);
-	}
-
-	private void cargarDatosPruebaIniciales() {
-		controlador.generarDatosPrueba();
-		aplicarRequerimientosEnSpinners();
-		refrescarPersonas();
-		refrescarIncompatibilidades();
-	}
-
 	private void cargarDatosGuardados() {
 		try {
 			if (controlador.cargarEstado()) {

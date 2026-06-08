@@ -24,6 +24,11 @@ public class GestorIncompatibilidades {
 		incompatibilidades.removeIf(i -> i.involucra(persona));
 	}
 
+	/** Quita la incompatibilidad entre dos personas si existe. */
+	public boolean eliminar(Persona p1, Persona p2) {
+		return incompatibilidades.removeIf(i -> i.involucra(p1, p2));
+	}
+
 	/** Indica si dos personas son incompatibles entre sí. */
 	public boolean sonIncompatibles(Persona p1, Persona p2) {
 		for (Incompatibilidad i : incompatibilidades) {
