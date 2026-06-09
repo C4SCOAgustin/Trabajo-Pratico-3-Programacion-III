@@ -97,7 +97,11 @@ public class Controlador {
 		if (a == null || b == null) {
 			throw new IllegalArgumentException("Ambas personas deben existir");
 		}
+		if(gestor.sonIncompatibles(a, b)){
+			throw new IllegalArgumentException("La incompatibilidad ya existe");
+		}
 		gestor.agregar(new Incompatibilidad(a, b));
+
 	}
 
 	public void eliminarIncompatibilidad(String nombreA, String nombreB) {
