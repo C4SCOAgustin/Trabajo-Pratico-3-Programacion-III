@@ -1,4 +1,4 @@
-package test.modelo;
+package test;
 
 import static org.junit.Assert.*;
 
