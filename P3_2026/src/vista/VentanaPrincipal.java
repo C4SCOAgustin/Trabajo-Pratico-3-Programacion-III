@@ -31,6 +31,7 @@ import javax.swing.event.ChangeListener;
 import controlador.Controlador;
 import modelo.EstadisticasSolver;
 import modelo.Incompatibilidad;
+import modelo.ModeloEquipo;
 import modelo.ModeloObserver;
 import modelo.Persona;
 import modelo.ResultadoResolucion;
@@ -64,7 +65,8 @@ public class VentanaPrincipal extends JFrame implements ModeloObserver {
     private static final int PROGRESO_MINIMO = 0;
     private static final int PROGRESO_COMPLETO = 100;
 
-    private final Controlador controlador = new Controlador();
+    private final ModeloEquipo modelo;
+    private final Controlador controlador;
 
     private Timer timerProgreso;
     private long inicioResolucion;
@@ -100,6 +102,20 @@ public class VentanaPrincipal extends JFrame implements ModeloObserver {
     private JLabel lblProgreso;
 
     public VentanaPrincipal() {
+        this(new ModeloEquipo());
+    }
+
+    public VentanaPrincipal(ModeloEquipo modelo) {
+        this(modelo, new Controlador(modelo));
+    }
+
+    public VentanaPrincipal(ModeloEquipo modelo, Controlador controlador) {
+        if (modelo == null || controlador == null) {
+            throw new IllegalArgumentException("El modelo y el controlador no pueden ser nulos");
+        }
+        this.modelo = modelo;
+        this.controlador = controlador;
+
         TemaOscuro.aplicar();
 
         setTitle("Equipo Ideal");
@@ -124,11 +140,11 @@ public class VentanaPrincipal extends JFrame implements ModeloObserver {
         });
 
         // Registrarse como observer para recibir notificaciones automáticas
-        controlador.agregarObserver(this);
+        modelo.agregarObserver(this);
 
         // Actualizar UI con datos cargados
-        refrescarPersonas(controlador.getPersonas());
-        refrescarIncompatibilidades(controlador.getIncompatibilidades());
+        refrescarPersonas(modelo.getPersonas());
+        refrescarIncompatibilidades(modelo.getIncompatibilidades());
     }
 
     // ---- Implementación de ModeloObserver ----
@@ -387,7 +403,7 @@ public class VentanaPrincipal extends JFrame implements ModeloObserver {
     }
 
     private void borrarTodasLasPersonas() {
-        if (controlador.getPersonas().isEmpty()) {
+        if (modelo.getPersonas().isEmpty()) {
             TemaOscuro.mostrarMensaje(this, "No hay personas para borrar.", "Aviso", JOptionPane.INFORMATION_MESSAGE);
             return;
         }

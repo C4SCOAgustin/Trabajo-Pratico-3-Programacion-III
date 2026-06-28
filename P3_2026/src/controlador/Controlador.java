@@ -6,11 +6,7 @@ import java.util.function.Consumer;
 import javax.swing.SwingWorker;
 
 import modelo.EstadisticasSolver;
-import modelo.Incompatibilidad;
 import modelo.ModeloEquipo;
-import modelo.ModeloObserver;
-import modelo.Persona;
-import modelo.Requerimientos;
 import modelo.ResultadoResolucion;
 import modelo.Rol;
 
@@ -20,10 +16,17 @@ import modelo.Rol;
  */
 public class Controlador {
 
-    private final ModeloEquipo modelo = new ModeloEquipo();
+    private final ModeloEquipo modelo;
 
-    public void agregarObserver(ModeloObserver observer) {
-        modelo.agregarObserver(observer);
+    public Controlador() {
+        this(new ModeloEquipo());
+    }
+
+    public Controlador(ModeloEquipo modelo) {
+        if (modelo == null) {
+            throw new IllegalArgumentException("El modelo no puede ser nulo");
+        }
+        this.modelo = modelo;
     }
 
     public void agregarPersona(String nombre, Rol rol, int calificacion) {
@@ -38,10 +41,6 @@ public class Controlador {
         modelo.eliminarTodasLasPersonas();
     }
 
-    public List<Persona> getPersonas() {
-        return modelo.getPersonas();
-    }
-
     public void agregarIncompatibilidad(String nombreA, String nombreB) {
         modelo.agregarIncompatibilidad(nombreA, nombreB);
     }
@@ -50,24 +49,12 @@ public class Controlador {
         modelo.eliminarIncompatibilidad(nombreA, nombreB);
     }
 
-    public List<Incompatibilidad> getIncompatibilidades() {
-        return modelo.getIncompatibilidades();
-    }
-
     public void setRequerimiento(Rol rol, int cantidad) {
         modelo.setRequerimiento(rol, cantidad);
     }
 
-    public Requerimientos getRequerimientos() {
-        return modelo.copiarRequerimientos();
-    }
-
     public void limpiarDatos() {
         modelo.limpiarDatos();
-    }
-
-    public Requerimientos copiarRequerimientos() {
-        return modelo.copiarRequerimientos();
     }
 
     /**
