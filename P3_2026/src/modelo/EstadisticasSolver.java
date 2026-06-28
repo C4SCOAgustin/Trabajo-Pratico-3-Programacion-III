@@ -7,6 +7,7 @@ import java.util.Locale;
 public class EstadisticasSolver implements Serializable {
 
 	private static final long serialVersionUID = 1L;
+	private static final double MILISEGUNDOS_POR_SEGUNDO = 1000.0;
 
 	private final long llamadasCasoBase;
 	private final long tiempoMillis;
@@ -25,7 +26,7 @@ public class EstadisticasSolver implements Serializable {
 	}
 
 	public double getTiempoSegundos() {
-		return tiempoMillis / 1000.0;
+		return tiempoMillis / MILISEGUNDOS_POR_SEGUNDO;
 	}
 
 	@Override

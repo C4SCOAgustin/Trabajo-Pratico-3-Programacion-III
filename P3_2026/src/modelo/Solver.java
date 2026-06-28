@@ -25,6 +25,9 @@ public class Solver {
 	private long inicioEjecucionNano;
 	private final IntConsumer reporteProgreso;
 	private static final long INTERVALO_REPORTE_PROGRESO = 1000L;
+	private static final int MAX_EXPONENTE_ESTIMACION = 20;
+	private static final int PROGRESO_MAXIMO_PARCIAL = 99;
+	private static final int PROGRESO_COMPLETO = 100;
 
 	public Solver(List<Persona> personas, GestorIncompatibilidades gestor, Requerimientos requerimientos) {
 		this(personas, gestor, requerimientos, null);
@@ -50,7 +53,7 @@ public class Solver {
 		backtrack(0, new ArrayList<Persona>(), 0);
 		long tiempoMs = (System.nanoTime() - inicioEjecucionNano) / 1_000_000L;
 		ultimasEstadisticas = new EstadisticasSolver(llamadasCasoBase, tiempoMs);
-		notificarProgreso(100);
+		notificarProgreso(PROGRESO_COMPLETO);
 		return mejorEquipo;
 	}
 
@@ -67,7 +70,8 @@ public class Solver {
 		nodosVisitados++;
 		if (reporteProgreso != null && nodosVisitados % INTERVALO_REPORTE_PROGRESO == 0
 				&& nodosEstimados > 0) {
-			int porcentaje = (int) Math.min(99, (nodosVisitados * 100L) / nodosEstimados);
+			int porcentaje = (int) Math.min(PROGRESO_MAXIMO_PARCIAL,
+					(nodosVisitados * (long) PROGRESO_COMPLETO) / nodosEstimados);
 			notificarProgreso(porcentaje);
 		}
 
@@ -130,7 +134,7 @@ public class Solver {
 		if (cantidadPersonas <= 0) {
 			return 1;
 		}
-		int exponente = Math.min(cantidadPersonas, 20);
+		int exponente = Math.min(cantidadPersonas, MAX_EXPONENTE_ESTIMACION);
 		return 1L << exponente;
 	}
 
